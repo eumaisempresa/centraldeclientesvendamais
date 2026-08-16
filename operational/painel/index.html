@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AILs Central de Clientes Venda+ | EU⁺ Negócio</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #F8FAFC;
+      --bg-surface: #FFFFFF;
+      --text-main: #0F172A;
+      --text-muted: #475569;
+      --border-color: #E2E8F0;
+      --accent-blue: #1E3A8A;
+      --accent-gold: #D97706;
+      --green: #10B981;
+      --yellow: #F59E0B;
+      --orange: #EA580C;
+      --red: #EF4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'DM Sans', sans-serif; }
+    body { background-color: var(--bg-primary); color: var(--text-main); line-height: 1.5; padding: 20px; }
+    .container { max-width: 1400px; margin: 0 auto; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); overflow: hidden; }
+    header { background: var(--accent-blue); color: #fff; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid var(--accent-gold); }
+    h1 { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; letter-spacing: 0.5px; }
+    .subtitle { font-size: 0.85rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; }
+    .nav-tabs { display: flex; background: #F1F5F9; border-bottom: 1px solid var(--border-color); overflow-x: auto; padding: 0 20px; }
+    .tab-btn { background: none; border: none; padding: 15px 20px; font-weight: 600; font-size: 0.9rem; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+    .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-gold); background: var(--bg-surface); }
+    .content { padding: 30px; min-height: 500px; }
+    .card { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+    .btn { background: var(--accent-blue); color: #fff; border: none; padding: 10px 18px; border-radius: 4px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+    .btn:hover { opacity: 0.9; }
+    .btn-gold { background: var(--accent-gold); color: #fff; }
+    .btn-green { background: var(--green); color: #fff; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9rem; }
+    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
+    th { background: #F8FAFC; color: var(--text-main); font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+    tr:hover { background: #F8FAFC; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .badge-ativo { background: #D1FAE5; color: #065F46; }
+    .badge-risco { background: #FEF3C7; color: #92400E; }
+    .badge-urgente { background: #FFEDD5; color: #9A3412; }
+    .badge-inativo { background: #FEE2E2; color: #991B1B; }
+    footer { text-align: center; padding: 20px; background: #F8FAFC; border-top: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>AILs CENTRAL DE CLIENTES VENDA+</h1>
+        <div class="subtitle">Ecossistema EU⁺ Negócio · Base · Motor · Ação</div>
+      </div>
+      <div id="user-info" style="font-size: 0.9rem; font-weight: 600;">Modo Operacional Branco</div>
+    </header>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('import')">Importação</button>
+      <button class="tab-btn" onclick="switchTab('gerencial')">Gerencial</button>
+      <button class="tab-btn" onclick="switchTab('precos')">Tabela de Preços</button>
+      <button class="tab-btn" onclick="switchTab('carteira')">Carteira</button>
+      <button class="tab-btn" onclick="switchTab('auditoria')">Auditoria</button>
+      <button class="tab-btn" onclick="switchTab('produtos')">Produtos</button>
+      <button class="tab-btn" onclick="switchTab('cotacao')">Cotação</button>
+      <button class="tab-btn" onclick="switchTab('gestao')">Gestão</button>
+    </div>
+
+    <div class="content">
+      <div id="tab-import" class="tab-content">
+        <h2>Importação de Relatórios e Carga de Dados</h2>
+        <p style="margin-top: 10px; color: var(--text-muted);">Faça o upload do relatório em Excel (XLSX/CSV) para popular o painel operacional com os dados atualizados de clientes, receitas e mix.</p>
+        <div class="card" style="margin-top: 20px; text-align: center; padding: 40px; border: 2px dashed var(--border-color);">
+          <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" style="margin-bottom: 15px;">
+          <br>
+          <button class="btn" onclick="alert('Selecione um arquivo Excel válido para carregar as bases.')">Processar Relatório</button>
+        </div>
+      </div>
+
+      <div id="tab-gerencial" class="tab-content" style="display:none;">
+        <h2>Visão Gerencial e Indicadores</h2>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 20px;">
+          <div class="card"><h3>Total Clientes</h3><p style="font-size: 1.5rem; font-weight: 700; margin-top: 5px;">1.376</p></div>
+          <div class="card"><h3>Ativos</h3><p style="font-size: 1.5rem; font-weight: 700; color: var(--green); margin-top: 5px;">435</p></div>
+          <div class="card"><h3>Em Risco</h3><p style="font-size: 1.5rem; font-weight: 700; color: var(--yellow); margin-top: 5px;">188</p></div>
+          <div class="card"><h3>Inativos</h3><p style="font-size: 1.5rem; font-weight: 700; color: var(--red); margin-top: 5px;">645</p></div>
+        </div>
+      </div>
+
+      <div id="tab-precos" class="tab-content" style="display:none;">
+        <h2>Tabela de Preços e Referências</h2>
+        <p style="margin-top: 10px; color: var(--text-muted);">Consulte os preços de referência por modalidade (Televendas, Caixa 10+, Pallet) e gere mensagens estruturadas para WhatsApp.</p>
+      </div>
+
+      <div id="tab-carteira" class="tab-content" style="display:none;">
+        <h2>Gestão de Carteira de Clientes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Representante</th>
+              <th>Status</th>
+              <th>Mix</th>
+              <th>Receita Total</th>
+              <th>Última Compra</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>MARCELO CAMPOS SARAIVA JUNIOR</strong></td>
+              <td>LIVIAOS</td>
+              <td><span class="badge badge-ativo">Ativo</span></td>
+              <td>9</td>
+              <td>R$ 6.274.421,84</td>
+              <td>10/08/2026</td>
+              <td><button class="btn" style="padding: 4px 8px; font-size: 0.8rem;" onclick="alert('Ação na linha')">WhatsApp</button></td>
+            </tr>
+            <tr>
+              <td><strong>JOSENIO DA SILVA</strong></td>
+              <td>DANILODF</td>
+              <td><span class="badge badge-ativo">Ativo</span></td>
+              <td>187</td>
+              <td>R$ 1.298.319,01</td>
+              <td>10/08/2026</td>
+              <td><button class="btn" style="padding: 4px 8px; font-size: 0.8rem;" onclick="alert('Ação na linha')">WhatsApp</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="tab-auditoria" class="tab-content" style="display:none;">
+        <h2>Auditoria Operacional</h2>
+        <p style="margin-top: 10px; color: var(--text-muted);">Controle de sem ramo, ramos divergentes, inativos, risco e urgentes.</p>
+      </div>
+
+      <div id="tab-produtos" class="tab-content" style="display:none;">
+        <h2>Análise de Produtos</h2>
+        <p style="margin-top: 10px; color: var(--text-muted);">Pesquise por categoria, nível e produto, visualizando quantidades e receita gerada.</p>
+      </div>
+
+      <div id="tab-cotacao" class="tab-content" style="display:none;">
+        <h2>Sistema de Cotação e Propostas</h2>
+        <p style="margin-top: 10px; color: var(--text-muted);">Gere propostas comerciais em PDF e mensagens formatadas para WhatsApp sem expor preços de tabela.</p>
+      </div>
+
+      <div id="tab-gestao" class="tab-content" style="display:none;">
+        <h2>Painel de Gestão e Alertas</h2>
+        <div class="card" style="border-left: 4px solid var(--red);">
+          <strong>Alerta Operacional:</strong> Venda de volume que comprometa o estoque da loja exige alinhamento prévio com o comprador e gerente.
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      AILs Central de Clientes Venda+ · Ecossistema EU⁺ Negócio · Todos os direitos reservados
+    </footer>
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).style.display = 'block';
+      event.currentTarget.classList.add('active');
+    }
+  </script>
+</body>
+</html>
