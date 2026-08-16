@@ -1,0 +1,392 @@
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import {
+  BarChart3,
+  Check,
+  ClipboardList,
+  Download,
+  FileSpreadsheet,
+  Filter,
+  MessageCircle,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Settings2,
+  ShieldAlert,
+  ShoppingBag,
+  UploadCloud,
+  Users,
+  X,
+} from "lucide-react";
+
+type Role = "ADMIN" | "VENDEDOR";
+type TabId = "IMPORTACAO" | "GERENCIAL" | "PRECOS" | "CARTEIRA" | "AUDITORIA" | "PRODUTOS" | "COTACAO" | "GESTAO";
+type Status = "ATIVO" | "RISCO" | "URGENTE" | "INATIVO";
+
+type ClientRow = {
+  id: string;
+  cliente: string;
+  representante: string;
+  status: Status;
+  mix: number;
+  receita: number;
+  ramo: string;
+  contato: string;
+  ultimaCompra: string;
+  dias: number;
+};
+
+type ProductRow = {
+  produto: string;
+  categoria: string;
+  nivel: string;
+  quantidade: number;
+  valor: number;
+  compradores: number;
+  tv: number;
+  cx10: number;
+  plt: number;
+};
+
+const initialClients: ClientRow[] = [
+  { id: "255575", cliente: "Marcelo c s j", representante: "43257 OTOSOS", status: "ATIVO", mix: 9, receita: 6274421.84, ramo: "DISTRIBUIDORAS DE BEBIDAS", contato: "", ultimaCompra: "10/08/2026", dias: 2 },
+  { id: "216494", cliente: "JOSENIO C S SILVA", representante: "38727 DANIELF", status: "ATIVO", mix: 187, receita: 1298319.01, ramo: "REVENDA DE CESTA BÁSICA", contato: "27997853435", ultimaCompra: "10/08/2026", dias: 2 },
+  { id: "243640", cliente: "MIAU ATACADO E VAREJO LTDA", representante: "38727 DANIELF", status: "RISCO", mix: 16, receita: 1193960.70, ramo: "ATACADOS, DISTRIB. E CENTRAIS DE CO", contato: "27999478463", ultimaCompra: "25/07/2026", dias: 18 },
+  { id: "1125", cliente: "LUIZ DISTRIBUIDORA LTDA", representante: "56480 VITOR", status: "URGENTE", mix: 9, receita: 591439.95, ramo: "ATACADOS, DISTRIB. E CENTRAIS DE CO", contato: "27303804043", ultimaCompra: "05/07/2026", dias: 38 },
+  { id: "264243", cliente: "PATAGONIA INDUSTRIA DE ALIMENTOS LTDA", representante: "38727 DANILODF", status: "INATIVO", mix: 23, receita: 319314.40, ramo: "RESTAURANTES, COZINHAS E REFEITORIO", contato: "", ultimaCompra: "03/05/2026", dias: 101 },
+  { id: "256366", cliente: "SUPER FLET COMERCIAL", representante: "58297 MARILDO", status: "ATIVO", mix: 32, receita: 270422.74, ramo: "SUPERMERCADOS E MERCEARIAS", contato: "", ultimaCompra: "10/08/2026", dias: 2 },
+  { id: "165614", cliente: "EDGARD C G SANTOS", representante: "33381 ALEXANDRES", status: "RISCO", mix: 141, receita: 197090.85, ramo: "SUPERMERCADOS E MERCEARIAS", contato: "27996061995", ultimaCompra: "20/07/2026", dias: 23 },
+  { id: "194984", cliente: "INSTITUTO JURIDICO DA SAUDE", representante: "28537 NAIARJUR", status: "INATIVO", mix: 492, receita: 152351.61, ramo: "ONG, PREFEITURA, ASSOCIACOES", contato: "3132955655", ultimaCompra: "12/04/2026", dias: 122 },
+];
+
+const initialProducts: ProductRow[] = [
+  { produto: "ARROZ PARBOILIZADO 5KG", categoria: "MERCEARIA", nivel: "BÁSICO", quantidade: 1840, valor: 159820, compradores: 42, tv: 86.9, cx10: 82.5, plt: 79.9 },
+  { produto: "FARINHA DE TRIGO 25KG", categoria: "MERCEARIA", nivel: "PROFISSIONAL", quantidade: 520, valor: 68450, compradores: 18, tv: 132.5, cx10: 127.9, plt: 119.9 },
+  { produto: "REFRIGERANTE COLA 2L", categoria: "BEBIDAS", nivel: "GIRO", quantidade: 3180, valor: 144220, compradores: 75, tv: 7.8, cx10: 7.35, plt: 6.9 },
+  { produto: "MUSSARELA FATIADA KG", categoria: "LATICÍNIOS", nivel: "PREMIUM", quantidade: 790, valor: 52540, compradores: 27, tv: 34.9, cx10: 32.9, plt: 30.9 },
+  { produto: "OLEO DE SOJA 900ML", categoria: "MERCEARIA", nivel: "BÁSICO", quantidade: 2280, valor: 28180, compradores: 51, tv: 6.99, cx10: 6.59, plt: 6.19 },
+];
+
+const tabItems: { id: TabId; label: string; icon: typeof BarChart3 }[] = [
+  { id: "IMPORTACAO", label: "IMPORTAÇÃO", icon: UploadCloud },
+  { id: "GERENCIAL", label: "GERENCIAL", icon: BarChart3 },
+  { id: "PRECOS", label: "TABELA DE PREÇOS", icon: ClipboardList },
+  { id: "CARTEIRA", label: "CARTEIRA", icon: Users },
+  { id: "AUDITORIA", label: "AUDITORIA", icon: ShieldAlert },
+  { id: "PRODUTOS", label: "PRODUTOS", icon: ShoppingBag },
+  { id: "COTACAO", label: "COTAÇÃO", icon: FileSpreadsheet },
+  { id: "GESTAO", label: "GESTÃO", icon: Settings2 },
+];
+
+const brl = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const openWhatsapp = (phone: string, client: string) => {
+  if (!phone) return;
+  const text = encodeURIComponent(`Olá, ${client}. Tudo bem? Estamos acompanhando sua operação e gostaríamos de falar sobre suas próximas compras.`);
+  window.open(`https://wa.me/55${phone.replace(/\D/g, "")}?text=${text}`, "_blank", "noopener,noreferrer");
+};
+
+function StatusChip({ status }: { status: Status }) {
+  return <span className={`op-status op-status-${status.toLowerCase()}`}>{status}</span>;
+}
+
+function SectionHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description?: string; action?: React.ReactNode }) {
+  return <div className="op-section-header"><div><div className="op-eyebrow">{eyebrow}</div><h2>{title}</h2>{description && <p>{description}</p>}</div>{action}</div>;
+}
+
+export default function OperationalDashboard({ role, planId, rowLimit, sellerLimit, sellerName, scriptUrl, initialMotorToken, onLogout }: { role: Role; planId: string; rowLimit: number; sellerLimit: number; sellerName?: string; scriptUrl: string; initialMotorToken?: string; onLogout: () => void }) {
+  const [activeTab, setActiveTab] = useState<TabId>("CARTEIRA");
+  const [clients, setClients] = useState(initialClients);
+  const [products, setProducts] = useState(initialProducts);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Status | "TODOS">("TODOS");
+  const [repFilter, setRepFilter] = useState("TODOS");
+  const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<ClientRow | null>(null);
+  const [sellers, setSellers] = useState<{ ID: string; NOME: string; EMAIL: string; REPRESENTANTE?: string; ATIVO: string }[]>([]);
+  const [quoteCustomer, setQuoteCustomer] = useState("");
+  const [quoteStore, setQuoteStore] = useState("");
+  const [quoteAddress, setQuoteAddress] = useState("");
+  const [quotePayment, setQuotePayment] = useState("PIX");
+  const [quoteProduct, setQuoteProduct] = useState("");
+  const [quoteItems, setQuoteItems] = useState<{ produto: string; quantidade: number; preco: number; tv: number; cx10: number; plt: number }[]>([]);
+  const [editedVariables, setEditedVariables] = useState({ validade: "VÁLIDA SOMENTE PARA HOJE", assinatura: "EQUIPE COMERCIAL", observacao: "" });
+  const [motorToken, setMotorToken] = useState(initialMotorToken || "");
+  const [motorConnected, setMotorConnected] = useState(false);
+
+  const representatives = useMemo(() => ["TODOS", ...Array.from(new Set(clients.map((client) => client.representante)))], [clients]);
+  const visibleClients = useMemo(() => clients.filter((client) => {
+    const matchSearch = `${client.cliente} ${client.id} ${client.ramo}`.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "TODOS" || client.status === statusFilter;
+    const matchRep = repFilter === "TODOS" || client.representante === repFilter;
+    if (role === "VENDEDOR") {
+      const own = Boolean(sellerName) && client.representante.toLowerCase().includes(String(sellerName).toLowerCase());
+      const global = client.status === "INATIVO" || client.status === "URGENTE";
+      if (!own && !global) return false;
+    }
+    return matchSearch && matchStatus && matchRep;
+  }), [clients, role, search, statusFilter, repFilter, sellerName]);
+
+  const motorRequest = async <T,>(payload: Record<string, unknown>): Promise<T> => {
+    const response = await fetch(scriptUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error || data.message || "O Apps Script recusou a operação.");
+    return data as T;
+  };
+
+  const connectMotor = async (): Promise<string> => {
+    const password = window.prompt("INFORME A SENHA DO GESTOR CONFIGURADA NAS SCRIPT PROPERTIES:");
+    if (!password) return "";
+    try {
+      const result = await motorRequest<{ adminToken: string }>({ action: "loginGestor", password });
+      setMotorToken(result.adminToken);
+      setMotorConnected(true);
+      setNotice("MOTOR APPS SCRIPT CONECTADO. AÇÕES ADMINISTRATIVAS LIBERADAS.");
+      return result.adminToken;
+    } catch (error) {
+      setMotorConnected(false);
+      setNotice(error instanceof Error ? error.message.toUpperCase() : "NÃO FOI POSSÍVEL CONECTAR AO MOTOR.");
+      return "";
+    }
+  };
+
+  const requireMotor = async () => motorToken || await connectMotor();
+
+  useEffect(() => {
+    if (!motorToken) return;
+    let cancelled = false;
+    const loadWorkspace = async () => {
+      try {
+        const response = role === "ADMIN"
+          ? await fetch(scriptUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "getWorkspace", adminToken: motorToken }) })
+          : await fetch(`${scriptUrl}?action=getData&token=${encodeURIComponent(motorToken)}`, { method: "GET" });
+        const data = await response.json();
+        if (!data?.success || cancelled) return;
+        const remoteClients = Array.isArray(data.clients) ? data.clients.map((row: Record<string, unknown>, index: number) => ({
+          id: String(row.ID_CLIENTE || index + 1),
+          cliente: String(row.CLIENTE || "CLIENTE SEM NOME").toUpperCase(),
+          representante: String(row.REPRESENTANTE || "SEM REPRESENTANTE").toUpperCase(),
+          status: (String(row.STATUS || "ATIVO").toUpperCase() as Status),
+          mix: Number(row.MIX || 0),
+          receita: Number(row.RECEITA_TOTAL || 0),
+          ramo: String(row.RAMO_DE_ATIVIDADE || "").toUpperCase(),
+          contato: String(row.CONTATO || row.TELEFONE || ""),
+          ultimaCompra: row.ULTIMA_COMPRA ? new Date(String(row.ULTIMA_COMPRA)).toLocaleDateString("pt-BR") : "",
+          dias: Number(row.DIAS_SEM_COMPRAR || 0),
+        })) : [];
+        const remoteProducts = Array.isArray(data.products) ? data.products.map((row: Record<string, unknown>) => ({
+          produto: String(row.PRODUTO || "").toUpperCase(),
+          categoria: String(row.CATEGORIA || "").toUpperCase(),
+          nivel: String(row.NIVEL || "").toUpperCase(),
+          quantidade: Number(row.QUANTIDADE || 0),
+          valor: Number(row.VALOR || 0),
+          compradores: Number(row.COMPRADORES || 0),
+          tv: Number(row.TV || 0),
+          cx10: Number(row.CX10 || 0),
+          plt: Number(row.PLT || 0),
+        })) : [];
+        if (remoteClients.length) setClients(remoteClients);
+        if (remoteProducts.length) setProducts(remoteProducts);
+        if (Array.isArray(data.users)) setSellers(data.users.filter((user: Record<string, unknown>) => String(user.ROLE || "") === "VENDEDOR").map((user: Record<string, unknown>) => ({ ID: String(user.ID || ""), NOME: String(user.NOME || ""), EMAIL: String(user.EMAIL || ""), REPRESENTANTE: String(user.REPRESENTANTE || ""), ATIVO: String(user.ATIVO || "SIM") })));
+        setMotorConnected(true);
+        setNotice("BASE AUTENTICADA DO APPS SCRIPT CARREGADA.");
+      } catch {
+        setNotice("NÃO FOI POSSÍVEL CARREGAR A BASE AUTENTICADA DO APPS SCRIPT.");
+      }
+    };
+    loadWorkspace();
+    return () => { cancelled = true; };
+  }, [scriptUrl, motorToken, role]);
+
+  const kpis = useMemo(() => ({
+    total: visibleClients.length,
+    ativo: visibleClients.filter((client) => client.status === "ATIVO").length,
+    risco: visibleClients.filter((client) => client.status === "RISCO").length,
+    urgente: visibleClients.filter((client) => client.status === "URGENTE").length,
+    inativo: visibleClients.filter((client) => client.status === "INATIVO").length,
+    receita: visibleClients.reduce((total, client) => total + client.receita, 0),
+  }), [visibleClients]);
+
+  const addQuoteItem = () => {
+    const product = products.find((item) => item.produto === quoteProduct) || { produto: quoteProduct || "PRODUTO MANUAL", tv: 0 };
+    if (!quoteProduct && !product.produto) return;
+    setQuoteItems((items) => [...items, { produto: product.produto, quantidade: 1, preco: product.tv || 0, tv: product.tv || 0, cx10: "cx10" in product ? Number(product.cx10 || 0) : 0, plt: "plt" in product ? Number(product.plt || 0) : 0 }]);
+    setQuoteProduct("");
+  };
+
+  const exportCsv = (rows: Record<string, string | number>[], filename: string) => {
+    const keys = Object.keys(rows[0] || {});
+    const csv = [keys.join(";"), ...rows.map((row) => keys.map((key) => JSON.stringify(row[key] ?? "")).join(";"))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = (rows: Record<string, string | number>[], filename: string, sheetName: string) => {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+    XLSX.writeFile(workbook, filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`);
+  };
+
+  const exportPdfRows = (title: string, rows: Record<string, string | number>[], filename: string, orientation: "portrait" | "landscape" = "landscape") => {
+    const doc = new jsPDF({ orientation, unit: "pt", format: "a4" });
+    const margin = 28;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const headers = Object.keys(rows[0] || {});
+    const columnWidth = Math.max(62, (pageWidth - margin * 2) / Math.max(headers.length, 1));
+    let y = 38;
+    doc.setTextColor(11, 63, 140); doc.setFontSize(15); doc.text(title, margin, y);
+    doc.setTextColor(90, 105, 125); doc.setFontSize(8); doc.text("AILs CENTRAL DE CLIENTES VENDA+ · EU⁺ NEGÓCIO", margin, y + 14);
+    y += 32;
+    const drawHeader = () => { doc.setFillColor(237, 242, 247); doc.rect(margin, y - 10, pageWidth - margin * 2, 18, "F"); doc.setTextColor(23, 52, 95); doc.setFontSize(7); headers.forEach((header, index) => doc.text(String(header).slice(0, 18), margin + index * columnWidth + 3, y)); y += 18; };
+    drawHeader();
+    doc.setFontSize(headers.length > 8 ? 6 : 7);
+    rows.forEach((row) => { const cells = headers.map((header) => doc.splitTextToSize(String(row[header] ?? ""), columnWidth - 6)); const height = Math.max(...cells.map((cell) => cell.length)) * 9 + 5; if (y + height > pageHeight - margin) { doc.addPage(); y = 38; drawHeader(); } cells.forEach((cell, index) => { doc.setTextColor(45, 58, 76); doc.text(cell, margin + index * columnWidth + 3, y); }); doc.setDrawColor(214, 222, 234); doc.line(margin, y + height - 3, pageWidth - margin, y + height - 3); y += height; });
+    doc.save(filename.endsWith(".pdf") ? filename : `${filename}.pdf`);
+  };
+
+  const exportPdfQuote = (text: string) => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const margin = 42; const width = doc.internal.pageSize.getWidth() - margin * 2;
+    doc.setTextColor(11, 63, 140); doc.setFontSize(18); doc.text("AILs CENTRAL DE CLIENTES VENDA+", margin, 48);
+    doc.setTextColor(90, 105, 125); doc.setFontSize(9); doc.text("EU⁺ NEGÓCIO · COTAÇÃO VÁLIDA SOMENTE PARA HOJE", margin, 64);
+    doc.setTextColor(35, 45, 60); doc.setFontSize(10); doc.text(doc.splitTextToSize(text, width), margin, 92);
+    doc.save("cotacao.pdf");
+  };
+
+  const generateHtmlSnapshot = async () => {
+    try {
+      const token = await requireMotor();
+      if (!token) return;
+      const snapshotData = JSON.stringify({ clients, products, planId, exportedAt: new Date().toISOString() }).replace(/</g, "\\u003c");
+      const html = `<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AILs CENTRAL DE CLIENTES VENDA+</title><style>body{margin:0;background:#f5f7fa;color:#17345f;font-family:Arial,sans-serif}header{background:#0b3f8c;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}header strong{font-size:18px}header small{display:block;opacity:.75;margin-top:4px}.tabs{display:flex;gap:6px;flex-wrap:wrap;background:#fff;padding:10px 24px;border-bottom:1px solid #d6deea}.tabs button{border:1px solid #cfd8e4;background:#eef3f8;color:#17345f;padding:8px 12px;border-radius:5px;font-weight:700;cursor:pointer}.tabs button.active{background:#0b3f8c;color:#fff}.main{padding:24px;max-width:1450px;margin:auto}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}.kpi,.panel{background:#fff;border:1px solid #d6deea;border-radius:8px;padding:16px;box-shadow:0 2px 7px #17345f12}.kpi span{font-size:11px;font-weight:700;color:#607089}.kpi strong{font-size:25px;display:block;margin-top:6px}.panel{overflow:auto}.panel h2{font-size:18px;margin-top:0}.table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{border-bottom:1px solid #e2e8f0;padding:9px;text-align:left;white-space:nowrap}.table th{background:#edf2f7;color:#17345f}.chip{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:700}.ATIVO{background:#d9f5e6;color:#087443}.RISCO{background:#fff2cc;color:#8a5b00}.URGENTE{background:#e8ddff;color:#5a3da6}.INATIVO{background:#fde0e0;color:#a12626}.empty{padding:35px;text-align:center;color:#607089}@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}header{display:block}.main{padding:14px}}
+</style></head><body><header><div><strong>AILs CENTRAL DE CLIENTES VENDA+</strong><small>EU⁺ NEGÓCIO · HTML COM DADOS · MODO OFFLINE</small></div><small id="exported"></small></header><nav class="tabs"><button data-view="GERENCIAL">GERENCIAL</button><button data-view="CARTEIRA">CARTEIRA</button><button data-view="AUDITORIA">AUDITORIA</button><button data-view="PRODUTOS">PRODUTOS</button><button data-view="PRECOS">TABELA DE PREÇOS</button><button data-view="COTACAO">COTAÇÃO</button><button data-view="GESTAO">GESTÃO</button></nav><main class="main" id="app"></main><script>const DATA=${snapshotData};const esc=function(v){return String(v==null?'':v).replace(/[&<>\"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'})[c]})};const brl=function(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})};const app=document.getElementById('app');document.getElementById('exported').textContent='EXPORTADO EM '+new Date(DATA.exportedAt).toLocaleString('pt-BR');function kpi(label,value){return '<div class="kpi"><span>'+label+'</span><strong>'+value+'</strong></div>'}function table(headers,rows){if(!rows.length)return '<div class="empty">NENHUM REGISTRO ENCONTRADO</div>';return '<table class="table"><thead><tr>'+headers.map(function(h){return '<th>'+h+'</th>'}).join('')+'</tr></thead><tbody>'+rows.map(function(row){return '<tr>'+row.map(function(cell){return '<td>'+cell+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>'}function render(view){document.querySelectorAll('.tabs button').forEach(function(button){button.classList.toggle('active',button.dataset.view===view)});var c=DATA.clients||[],p=DATA.products||[];if(view==='GERENCIAL'){var active=c.filter(function(x){return x.status==='ATIVO'}).length,risk=c.filter(function(x){return x.status==='RISCO'}).length,urgent=c.filter(function(x){return x.status==='URGENTE'}).length,inactive=c.filter(function(x){return x.status==='INATIVO'}).length;app.innerHTML='<div class="kpis">'+kpi('TOTAL CLIENTES',c.length)+kpi('ATIVOS',active)+kpi('RISCO',risk)+kpi('URGENTES',urgent)+kpi('INATIVOS',inactive)+'</div><section class="panel"><h2>VISÃO GERENCIAL OFFLINE</h2><p>ESTE ARQUIVO CONTÉM UMA CÓPIA DOS DADOS EXPORTADOS EM '+esc(DATA.exportedAt)+'</p></section>'}else if(view==='CARTEIRA'){app.innerHTML='<section class="panel"><h2>GESTÃO DE CARTEIRA</h2>'+table(['CLIENTE','REPRESENTANTE','STATUS','MIX','RECEITA','RAMO','CONTATO','DIAS'],c.map(function(x){return [esc(x.id+' '+x.cliente),esc(x.representante),'<span class="chip '+esc(x.status)+'">'+esc(x.status)+'</span>',esc(x.mix),brl(x.receita),esc(x.ramo||'SEM RAMO'),esc(x.contato||'SEM TELEFONE'),esc(x.dias)]}))+'</section>'}else if(view==='AUDITORIA'){var groups=[['CLIENTES SEM RAMO DE ATIVIDADE',c.filter(function(x){return !x.ramo})],['RAMOS DIVERGENTES / MIX INCOERENTE',c.filter(function(x){return x.ramo&&x.mix<20})],['CLIENTES INATIVOS (>45 DIAS)',c.filter(function(x){return x.status==='INATIVO'})],['CLIENTES EM RISCO (16 A 30 DIAS)',c.filter(function(x){return x.status==='RISCO'})],['CLIENTES URGENTES (31 A 45 DIAS)',c.filter(function(x){return x.status==='URGENTE'})]];app.innerHTML=groups.map(function(g){return '<section class="panel" style="margin-bottom:14px"><h2>'+g[0]+' · '+g[1].length+'</h2>'+table(['CLIENTE','REPRESENTANTE','RAMO','DIAS','CONTATO'],g[1].map(function(x){return [esc(x.cliente),esc(x.representante),esc(x.ramo||'RAMO NÃO CADASTRADO'),esc(x.dias),esc(x.contato||'SEM TELEFONE')]}))+'</section>'}).join('')}else if(view==='PRODUTOS'||view==='PRECOS'){app.innerHTML='<section class="panel"><h2>'+ (view==='PRODUTOS'?'INTELIGÊNCIA DE PRODUTOS':'TABELA DE PREÇOS') +'</h2>'+table(['PRODUTO','CATEGORIA','NÍVEL','QUANTIDADE','VALOR','COMPRADORES','TV','CX10','PLT'],p.map(function(x){return [esc(x.produto),esc(x.categoria),esc(x.nivel),esc(x.quantidade),brl(x.valor),esc(x.compradores),brl(x.tv),brl(x.cx10),brl(x.plt)]}))+'</section>'}else{app.innerHTML='<section class="panel"><h2>'+view+'</h2><p>ESTA VISÃO ESTÁ DISPONÍVEL NO PAINEL ONLINE. ESTE SNAPSHOT OFFLINE PRESERVA CLIENTES, PRODUTOS E INDICADORES PARA CONSULTA.</p></section>'}}document.querySelectorAll('.tabs button').forEach(function(button){button.addEventListener('click',function(){render(button.dataset.view)})});render('GERENCIAL');</script></body></html>`;
+      const result = await motorRequest<{ url: string }>({ action: "createHtmlSnapshot", adminToken: token, filename: `AILs_Central_${new Date().toISOString().slice(0, 10)}.html`, html });
+      setNotice(`HTML COM DADOS OFFLINE SALVO NO DRIVE: ${result.url}`);
+    } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO GERAR HTML COM DADOS."); }
+  };
+
+  const saveClientEdit = async () => {
+    if (!editing || editing === "variables" || !editForm) return;
+    try {
+      const token = await requireMotor();
+      if (!token) return;
+      const patch = { CLIENTE: editForm.cliente, CONTATO: editForm.contato, TELEFONE: editForm.contato, REPRESENTANTE: editForm.representante, STATUS: editForm.status, MIX: editForm.mix, RECEITA_TOTAL: editForm.receita, RAMO_DE_ATIVIDADE: editForm.ramo };
+      await motorRequest({ action: "updateClient", adminToken: token, clientId: editing, patch });
+      setClients((items) => items.map((item) => item.id === editing ? editForm : item));
+      setEditing(null); setEditForm(null); setNotice("CLIENTE ATUALIZADO NO APPS SCRIPT.");
+    } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO EDITAR CLIENTE."); }
+  };
+
+  const toggleSeller = async (seller: { ID: string; ATIVO: string }) => {
+    try {
+      const token = await requireMotor();
+      if (!token) return;
+      const nextActive = seller.ATIVO !== "SIM";
+      await motorRequest({ action: "updateSeller", adminToken: token, userId: seller.ID, patch: { ATIVO: nextActive } });
+      setSellers((items) => items.map((item) => item.ID === seller.ID ? { ...item, ATIVO: nextActive ? "SIM" : "NÃO" } : item));
+      setNotice(nextActive ? "VENDEDOR ATIVADO." : "VENDEDOR DESATIVADO.");
+    } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO ATUALIZAR VENDEDOR."); }
+  };
+
+  const editSeller = async (seller: { ID: string; NOME: string; EMAIL: string; REPRESENTANTE?: string }) => {
+    const name = window.prompt("NOME DO VENDEDOR:", seller.NOME);
+    if (!name) return;
+    const representative = window.prompt("REPRESENTANTE/CÓDIGO DA CARTEIRA:", seller.REPRESENTANTE || name);
+    if (!representative) return;
+    try {
+      const token = await requireMotor();
+      if (!token) return;
+      await motorRequest({ action: "updateSeller", adminToken: token, userId: seller.ID, patch: { NOME: name, REPRESENTANTE: representative } });
+      setSellers((items) => items.map((item) => item.ID === seller.ID ? { ...item, NOME: name.toUpperCase(), REPRESENTANTE: representative.toUpperCase() } : item));
+      setNotice("VENDEDOR ATUALIZADO.");
+    } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO EDITAR VENDEDOR."); }
+  };
+
+  const uploadReport = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (loadEvent) => {
+      try {
+        const workbook = XLSX.read(loadEvent.target?.result, { type: "array", cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, string | number | Date>>(sheet, { defval: "" });
+        if (rows.length > rowLimit) throw new Error(`O plano permite até ${rowLimit.toLocaleString("pt-BR")} linhas.`);
+        const token = await requireMotor();
+        if (!token) return;
+        await motorRequest({ action: "importReport", adminToken: token, planId, filename: file.name, rows });
+        setNotice(`${rows.length} linhas importadas e enviadas ao Apps Script para persistência no Drive.`);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA NA IMPORTAÇÃO.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const renderImport = () => <>
+    <SectionHeader eyebrow="BASE OPERACIONAL" title="Importe e organize os dados da operação." description="O Administrador pode importar novos relatórios, corrigir variáveis e manter o histórico salvo no Drive." action={<button className="op-primary"><RefreshCw size={15} /> ATUALIZAR STATUS</button>} />
+    <div className="op-import-grid"><div className="op-upload-card"><UploadCloud size={30} /><h3>IMPORTAR NOVO RELATÓRIO</h3><p>Planilhas XLSX, XLS, CSV ou TSV. A estrutura universal preserva clientes, produtos, vendas, preços e contatos.</p><label className="op-primary op-file-button">SELECIONAR ARQUIVO<input type="file" accept=".xlsx,.xls,.csv,.tsv" onChange={uploadReport} hidden /></label><div className="op-small-note">LIMITE DO PLANO: {rowLimit.toLocaleString("pt-BR")} LINHAS</div></div><div className="op-import-side"><div className="op-info-row"><span>PLANO ATUAL</span><strong>{planId}</strong></div><div className="op-info-row"><span>ADMINISTRADORES</span><strong>1</strong></div><div className="op-info-row"><span>VENDEDORES LIBERADOS</span><strong>{sellerLimit}</strong></div><div className="op-info-row"><span>ARQUIVOS NO DRIVE</span><strong>HISTÓRICO</strong></div><button className="op-secondary" onClick={() => setNotice("Planilha modelo universal pronta para download.")}><Download size={15} /> BAIXAR PLANILHA MODELO</button><button className="op-secondary" onClick={connectMotor}><RefreshCw size={15} /> {motorConnected ? "MOTOR CONECTADO" : "CONECTAR APPS SCRIPT"}</button><button className="op-secondary" onClick={generateHtmlSnapshot}><FileSpreadsheet size={15} /> GERAR HTML COM DADOS</button></div></div>
+  </>;
+
+  const renderGerencial = () => <><SectionHeader eyebrow="VISÃO GERENCIAL" title="A operação em uma leitura rápida." description="KPIs por status, recuperação e distribuição comercial para apoiar a decisão do Administrador." action={<button className="op-secondary" onClick={() => exportCsv([{ INDICADOR: "CLIENTES RECUPERADOS", TOTAL: 2 }, { INDICADOR: "ATIVOS", TOTAL: kpis.ativo }], "gerencial.csv")}><Download size={15} /> EXPORTAR</button>} /><div className="op-kpi-grid">{[["TOTAL CLIENTES", kpis.total, "R$ " + kpis.receita.toLocaleString("pt-BR")], ["ATIVO", kpis.ativo, "CARTEIRA ATUAL"], ["RISCO", kpis.risco, "16 A 30 DIAS"], ["URGÊNCIA", kpis.urgente, "31 A 45 DIAS"], ["INATIVO", kpis.inativo, ">45 DIAS"], ["RECUPERADOS", 2, "ÚLTIMA COMPRA >46 DIAS"]].map(([label, value, note]) => <div className="op-kpi" key={String(label)}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>)}</div><div className="op-two-columns"><div className="op-panel"><h3>COMPARAÇÃO POR REPRESENTANTE</h3>{representatives.filter((rep) => rep !== "TODOS").map((rep) => <div className="op-bar-row" key={rep}><span>{rep}</span><div><i style={{ width: `${Math.min(100, (clients.filter((client) => client.representante === rep).length / 3) * 100)}%` }} /></div><strong>{clients.filter((client) => client.representante === rep).length}</strong></div>)}</div><div className="op-panel"><h3>DISTRIBUIÇÃO POR RAMO DE ATIVIDADE</h3>{Array.from(new Set(clients.map((client) => client.ramo))).slice(0, 5).map((ramo) => <div className="op-bar-row" key={ramo}><span>{ramo}</span><div><i style={{ width: `${Math.min(100, clients.filter((client) => client.ramo === ramo).length * 20)}%` }} /></div><strong>{clients.filter((client) => client.ramo === ramo).length}</strong></div>)}</div></div></>;
+
+  const renderCarteira = () => <><SectionHeader eyebrow="GESTÃO DE CARTEIRA" title="Clientes e próximos movimentos." description={role === "VENDEDOR" ? "Você visualiza seus Ativos e Riscos, além dos Inativos e Urgentes globais." : "O Administrador visualiza a operação completa e pode editar variáveis da base."} action={<div className="op-actions"><button className="op-secondary" onClick={() => exportExcel(visibleClients.map((client) => ({ CLIENTE: client.cliente, STATUS: client.status, REPRESENTANTE: client.representante, MIX: client.mix, RECEITA: client.receita, CONTATO: client.contato })), "carteira.xlsx", "CARTEIRA")}><Download size={15} /> EXCEL</button><button className="op-primary" onClick={() => exportPdfRows("CARTEIRA DE CLIENTES", visibleClients.map((client) => ({ CLIENTE: `${client.id} ${client.cliente}`, REPRESENTANTE: client.representante, STATUS: client.status, MIX: client.mix, RECEITA: brl(client.receita), RAMO: client.ramo, CONTATO: client.contato, DIAS: client.dias })), "carteira.pdf", "landscape")}><Download size={15} /> PDF PAISAGEM</button></div>} /><div className="op-kpi-grid compact">{[["TOTAL CLIENTES", kpis.total], ["ATIVO", kpis.ativo], ["RISCO", kpis.risco], ["URGÊNCIA", kpis.urgente], ["INATIVO", kpis.inativo]].map(([label, value]) => <div className="op-kpi" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}</div><div className="op-toolbar"><label><Filter size={14} /> STATUS<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "TODOS")}><option>TODOS</option><option>ATIVO</option><option>RISCO</option><option>URGENTE</option><option>INATIVO</option></select></label><label><Users size={14} /> REPRESENTANTE<select value={repFilter} onChange={(event) => setRepFilter(event.target.value)}>{representatives.map((rep) => <option key={rep}>{rep}</option>)}</select></label><label className="op-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="PESQUISAR CLIENTE, CÓDIGO OU RAMO" /></label></div><div className="op-table-wrap"><table className="op-table"><thead><tr><th>CLIENTE</th><th>REPRESENTANTE</th><th>STATUS</th><th>MIX</th><th>RECEITA TOTAL</th><th>RAMO</th><th>CONTATO</th><th>ÚLTIMA COMPRA</th><th>AÇÕES</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><strong>{client.id} {client.cliente}</strong></td><td>{client.representante}</td><td><StatusChip status={client.status} /></td><td>{client.mix}</td><td>{brl(client.receita)}</td><td>{client.ramo}</td><td>{client.contato || "CADASTRAR"}</td><td>{client.ultimaCompra} · {client.dias} DIAS</td><td><div className="op-row-actions">{client.contato && <button title="WhatsApp" className="op-icon-button" onClick={() => openWhatsapp(client.contato, client.cliente)}><MessageCircle size={15} /></button>}{role === "ADMIN" && <button title="Editar" className="op-icon-button" onClick={() => { setEditing(client.id); setEditForm({ ...client }); }}><Pencil size={15} /></button>}</div></td></tr>)}</tbody></table></div></>;
+
+  const renderPrices = () => <><SectionHeader eyebrow="TABELA DE PREÇOS" title="Referências para negociação." description="TV, CX10 e PLT são informativos para o vendedor. A comunicação usa somente o preço negociado." action={<button className="op-secondary" onClick={() => setNotice("Tabela de preços copiada em formato editável para o WhatsApp.")}><MessageCircle size={15} /> COPIAR WHATSAPP</button>} /><div className="op-toolbar"><label className="op-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="PESQUISAR PRODUTO" /></label><button className="op-secondary" onClick={() => exportExcel(products.map((product) => ({ PRODUTO: product.produto, CATEGORIA: product.categoria, TV: product.tv, CX10: product.cx10, PLT: product.plt })), "tabela-de-precos.xlsx", "PRECOS")}><Download size={15} /> EXPORTAR EXCEL</button></div><div className="op-table-wrap"><table className="op-table"><thead><tr><th>PRODUTO</th><th>CATEGORIA</th><th>NÍVEL</th><th>TV</th><th>CX10</th><th>PLT</th><th>ACÃO</th></tr></thead><tbody>{products.filter((product) => product.produto.toLowerCase().includes(search.toLowerCase())).map((product) => <tr key={product.produto}><td><strong>{product.produto}</strong></td><td>{product.categoria}</td><td>{product.nivel}</td><td>{brl(product.tv)}</td><td>{brl(product.cx10)}</td><td>{brl(product.plt)}</td><td><button className="op-icon-button" onClick={() => setNotice(`Produto ${product.produto} pronto para negociação.`)}><MessageCircle size={15} /></button></td></tr>)}</tbody></table></div></>;
+
+  const renderAudit = () => { const semRamo = clients.filter((client) => client.ramo.includes("ONG") || !client.ramo); const divergentes = clients.filter((client) => client.ramo.includes("SUPERMERCADOS") && client.mix < 20); const groups: [string, ClientRow[]][] = [["CLIENTES SEM RAMO DE ATIVIDADE", semRamo], ["RAMOS DIVERGENTES / MIX INCOERENTE", divergentes], ["CLIENTES INATIVOS (>45 DIAS)", clients.filter((client) => client.status === "INATIVO")], ["CLIENTES EM RISCO (16 A 30 DIAS)", clients.filter((client) => client.status === "RISCO")], ["CLIENTES URGENTES (31 A 45 DIAS)", clients.filter((client) => client.status === "URGENTE")]]; return <><SectionHeader eyebrow="AUDITORIA OPERACIONAL" title="Alertas que pedem uma ação." description="As cinco visões preservam o racional original e podem ser exportadas pelo Administrador." /><div className="op-audit-grid">{groups.map(([title, rows]) => <section className="op-audit-section" key={title}><div className="op-audit-title"><h3>{title}</h3><span>{rows.length}</span><button className="op-secondary" onClick={() => exportExcel(rows.map((client) => ({ CLIENTE: client.cliente, REPRESENTANTE: client.representante, RAMO: client.ramo, STATUS: client.status, DIAS: client.dias, CONTATO: client.contato })), `${title.replaceAll(" ", "_")}.xlsx`, "AUDITORIA")}><Download size={14} /> EXCEL</button></div><div className="op-table-wrap"><table className="op-table"><thead><tr><th>CLIENTE</th><th>REPRESENTANTE</th><th>RAMO / ANÁLISE</th><th>DIAS</th><th>CONTATO</th><th>AÇÃO</th></tr></thead><tbody>{rows.map((client) => <tr key={`${title}-${client.id}`}><td><strong>{client.cliente}</strong></td><td>{client.representante}</td><td>{client.ramo || "RAMO NÃO CADASTRADO"}</td><td>{client.dias}</td><td>{client.contato || "SEM TELEFONE"}</td><td>{client.contato && <button className="op-icon-button" onClick={() => openWhatsapp(client.contato, client.cliente)}><MessageCircle size={15} /></button>}</td></tr>)}</tbody></table></div></section>)}</div></>; };
+
+  const renderProducts = () => <><SectionHeader eyebrow="INTELIGÊNCIA DE PRODUTOS" title="Quem comprou o produto pesquisado?" description="Pesquise por categoria, nível ou produto e transforme venda histórica em oportunidade de carteira." /><div className="op-toolbar"><label className="op-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="PESQUISAR PRODUTO OU CATEGORIA" /></label></div><div className="op-table-wrap"><table className="op-table"><thead><tr><th>PRODUTO</th><th>CATEGORIA</th><th>NÍVEL</th><th>QTD. VENDIDA</th><th>VALOR</th><th>CLIENTES</th><th>AÇÃO</th></tr></thead><tbody>{products.filter((product) => `${product.produto} ${product.categoria} ${product.nivel}`.toLowerCase().includes(search.toLowerCase())).map((product) => <tr key={product.produto}><td><strong>{product.produto}</strong></td><td>{product.categoria}</td><td>{product.nivel}</td><td>{product.quantidade.toLocaleString("pt-BR")}</td><td>{brl(product.valor)}</td><td>{product.compradores}</td><td><button className="op-secondary" onClick={() => setNotice(`${product.compradores} clientes compradores disponíveis para ação indutiva.`)}>VER CLIENTES</button></td></tr>)}</tbody></table></div></>;
+
+  const renderQuote = () => {
+    const quoteText = [
+      `COTAÇÃO · ${quoteCustomer || "CLIENTE"}`,
+      `DATA: ${new Date().toLocaleDateString("pt-BR")}`,
+      `VALIDADE: ${editedVariables.validade}`,
+      `LOJA PARA FATURAMENTO: ${quoteStore || "NÃO INFORMADA"}`,
+      `ENDEREÇO: ${quoteAddress || "NÃO INFORMADO"}`,
+      `FORMA DE PAGAMENTO: ${quotePayment}`,
+      "",
+      "PRODUTOS",
+      quoteItems.map((item) => `${item.quantidade}x ${item.produto} — ${brl(item.preco)}`).join("\n"),
+      "",
+      editedVariables.observacao,
+      editedVariables.assinatura,
+    ].join("\n");
+    const quotePhone = clients.find((client) => client.cliente.toLowerCase() === quoteCustomer.toLowerCase() || client.cliente.toLowerCase().includes(quoteCustomer.toLowerCase()))?.contato || "";
+    const quoteRows = quoteItems.map((item) => ({ PRODUTO: item.produto, QUANTIDADE: item.quantidade, PRECO_NEGOCIADO: item.preco, TOTAL: item.quantidade * item.preco }));
+    return <>
+      <SectionHeader eyebrow="COTAÇÃO" title="Monte uma proposta clara e editável." description="Os três preços de referência ficam disponíveis somente para o vendedor. A mensagem usa apenas o preço negociado." />
+      <div className="op-quote-grid">
+        <div className="op-panel">
+          <label className="op-field">CLIENTE<input value={quoteCustomer} onChange={(event) => setQuoteCustomer(event.target.value)} placeholder="DIGITE OU INCLUA MANUALMENTE" /></label>
+          <label className="op-field">LOJA PARA FATURAMENTO<input value={quoteStore} onChange={(event) => setQuoteStore(event.target.value)} placeholder="INFORME MANUALMENTE" /></label>
+          <label className="op-field">ENDEREÇO<input value={quoteAddress} onChange={(event) => setQuoteAddress(event.target.value)} placeholder="INFORME MANUALMENTE" /></label>
+          <label className="op-field">FORMA DE PAGAMENTO<select value={quotePayment} onChange={(event) => setQuotePayment(event.target.value)}><option>DINHEIRO</option><option>PIX</option><option>CRÉDITO</option><option>DÉBITO</option><option>TÍCKET</option><option>OUTRA</option></select></label>
+          <label className="op-field">PRODUTO<input list="quote-products" value={quoteProduct} onChange={(event) => setQuoteProduct(event.target.value)} placeholder="PESQUISE OU DIGITE PRODUTO" /><datalist id="quote-products">{products.map((product) => <option value={product.produto} key={product.produto} />)}</datalist></label>
+          <button className="op-primary" onClick={addQuoteItem}><Plus size={15} /> INCLUIR PRODUTO</button>
+          {quoteItems.map((item, index) => <div className="op-quote-item" key={`${item.produto}-${index}`}><span><strong>{item.produto}</strong><small>TV {brl(item.tv)} · CX10 {brl(item.cx10)} · PLT {brl(item.plt)}</small></span><input type="number" value={item.quantidade} onChange={(event) => setQuoteItems((items) => items.map((current, currentIndex) => currentIndex === index ? { ...current, quantidade: Number(event.target.value) } : current))} /><input type="number" step="0.01" value={item.preco} onChange={(event) => setQuoteItems((items) => items.map((current, currentIndex) => currentIndex === index ? { ...current, preco: Number(event.target.value) } : current))} /></div>)}
+        </div>
+        <div className="op-panel">
+          <label className="op-field">VALIDADE<input value={editedVariables.validade} onChange={(event) => setEditedVariables({ ...editedVariables, validade: event.target.value })} /></label>
+          <label className="op-field">OBSERVAÇÕES<textarea value={editedVariables.observacao} onChange={(event) => setEditedVariables({ ...editedVariables, observacao: event.target.value })} /></label>
+          <label className="op-field">ASSINATURA FINAL<input value={editedVariables.assinatura} onChange={(event) => setEditedVariables({ ...editedVariables, assinatura: event.target.value })} /></label>
+          <div className="op-quote-preview"><pre>{quoteText}</pre></div>
+          <div className="op-actions"><button className="op-secondary" onClick={() => navigator.clipboard?.writeText(quoteText).then(() => setNotice("COTAÇÃO COPIADA COM FORMATAÇÃO."))}><ClipboardList size={15} /> COPIAR</button><button className="op-secondary" onClick={() => exportExcel(quoteRows, "cotacao.xlsx", "COTACAO")}><FileSpreadsheet size={15} /> EXCEL</button><button className="op-secondary" onClick={() => exportPdfQuote(quoteText)}><Download size={15} /> PDF</button><button className="op-primary" onClick={() => quotePhone ? openWhatsapp(quotePhone, quoteCustomer) : navigator.clipboard?.writeText(quoteText).then(() => setNotice("CLIENTE SEM TELEFONE. COTAÇÃO COPIADA PARA ENVIO MANUAL."))}><MessageCircle size={15} /> WHATSAPP</button></div>
+        </div>
+      </div>
+    </>;
+  };
+
+  const renderManagement = () => <><SectionHeader eyebrow="GESTÃO" title="Variáveis, acessos e regras da operação." description="O Administrador edita o que muda no dia a dia. A persistência definitiva será feita pelo Apps Script no Drive." action={<button className="op-primary" onClick={async () => { try { const token = await requireMotor(); if (!token) return; await motorRequest({ action: "saveVariables", adminToken: token, variables: editedVariables, updatedBy: "ADMIN" }); setNotice("VARIÁVEIS SALVAS NO APPS SCRIPT E NO DRIVE."); } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO SALVAR VARIÁVEIS."); } }}><Save size={15} /> SALVAR ALTERAÇÕES</button>} /><div className="op-alert-list"><div className="op-alert op-alert-danger"><ShieldAlert size={17} /><span>Venda de volume que comprometa o estoque da loja: alinhar com comprador e gerente. Sem alinhamento, não está autorizado vender.</span></div><div className="op-alert op-alert-danger"><ShieldAlert size={17} /><span>Venda que não tem estoque na loja e precisa ser carregado: somente com alinhamento do comprador.</span></div><div className="op-alert op-alert-warning"><ShieldAlert size={17} /><span>Produto com orientação de limite: não vender acima do limite.</span></div><div className="op-alert op-alert-warning"><ShieldAlert size={17} /><span>É proibido realizar vendas utilizando código de outro cliente.</span></div></div><div className="op-management-grid"><div className="op-panel"><h3>USUÁRIOS DO WORKSPACE</h3><div className="op-info-row"><span>ADMINISTRADORES</span><strong>1 / 1</strong></div><div className="op-info-row"><span>VENDEDORES</span><strong>{sellers.filter((seller) => seller.ATIVO === "SIM").length} / {sellerLimit}</strong></div>{sellers.length > 0 && <div className="op-seller-list">{sellers.map((seller) => <div className="op-seller-row" key={seller.ID}><div><strong>{seller.NOME}</strong><small>{seller.EMAIL} · {seller.REPRESENTANTE || "SEM REPRESENTANTE"} · {seller.ATIVO === "SIM" ? "ATIVO" : "INATIVO"}</small></div><div className="op-row-actions"><button className="op-icon-button" onClick={() => editSeller(seller)}><Pencil size={14} /></button><button className="op-icon-button" onClick={() => toggleSeller(seller)}>{seller.ATIVO === "SIM" ? <X size={14} /> : <Check size={14} />}</button></div></div>)}</div>}<button className="op-secondary" onClick={async () => { const name = window.prompt("NOME DO VENDEDOR:"); const email = window.prompt("E-MAIL DO VENDEDOR:"); const representative = window.prompt("REPRESENTANTE/CÓDIGO DA CARTEIRA:", name || ""); const password = window.prompt("SENHA TEMPORÁRIA:"); if (!name || !email || !representative || !password) return; try { const token = await requireMotor(); if (!token) return; const created = await motorRequest<{ user: { ID: string; NOME: string; EMAIL: string; REPRESENTANTE?: string; ATIVO: string } }>({ action: "createSeller", adminToken: token, name, email, representante: representative, password, planId }); setSellers((items) => [...items, created.user]); setNotice("VENDEDOR CADASTRADO NO APPS SCRIPT."); } catch (error) { setNotice(error instanceof Error ? error.message.toUpperCase() : "FALHA AO CADASTRAR VENDEDOR."); } }}><Plus size={15} /> ADICIONAR VENDEDOR</button></div><div className="op-panel"><h3>VARIÁVEIS EDITÁVEIS</h3><label className="op-field">NOME DA OPERAÇÃO<input value="AILs CENTRAL DE CLIENTES VENDA+" onChange={() => undefined} /></label><label className="op-field">MENSAGEM MOTIVACIONAL<textarea defaultValue="Relacionamento é a Arte de Vender. Venda é uma consequência." /></label><button className="op-secondary" onClick={() => setEditing("variables")}><Pencil size={15} /> EDITAR VARIÁVEIS</button></div></div></>;
+
+  const content = activeTab === "IMPORTACAO" ? renderImport() : activeTab === "GERENCIAL" ? renderGerencial() : activeTab === "PRECOS" ? renderPrices() : activeTab === "CARTEIRA" ? renderCarteira() : activeTab === "AUDITORIA" ? renderAudit() : activeTab === "PRODUTOS" ? renderProducts() : activeTab === "COTACAO" ? renderQuote() : renderManagement();
+
+  return <div className="operational-shell"><header className="operational-header"><div className="op-brand"><span className="op-brand-mark">EU<sup>⁺</sup></span><div><strong>AILs CENTRAL DE CLIENTES VENDA+</strong><small>EU⁺ NEGÓCIO · {role === "ADMIN" ? "ADMINISTRADOR" : "VENDEDOR"}</small></div></div><div className="op-header-actions"><span className="op-plan-badge">{planId} · {rowLimit.toLocaleString("pt-BR")} LINHAS</span><button onClick={onLogout}>SAIR</button></div></header><nav className="operational-tabs">{tabItems.map(({ id, label, icon: Icon }) => <button key={id} className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}><Icon size={14} /> {label}</button>)}</nav><main className="operational-main">{notice && <div className="op-notice"><Check size={16} /> {notice}<button onClick={() => setNotice("")}><X size={15} /></button></div>}{content}</main><footer className="operational-footer">ECOSSISTEMA EU⁺ · EU⁺ EMPRESA · EU⁺ NEGÓCIO · AILs CENTRAL DE CLIENTES VENDA+</footer>{editing && <div className="op-modal-backdrop" onClick={() => { setEditing(null); setEditForm(null); }}><div className="op-modal" onClick={(event) => event.stopPropagation()}>{editForm ? <><h3>EDITAR CLIENTE</h3><label className="op-field">CLIENTE<input value={editForm.cliente} onChange={(event) => setEditForm({ ...editForm, cliente: event.target.value.toUpperCase() })} /></label><label className="op-field">REPRESENTANTE<input value={editForm.representante} onChange={(event) => setEditForm({ ...editForm, representante: event.target.value.toUpperCase() })} /></label><label className="op-field">RAMO DE ATIVIDADE<input value={editForm.ramo} onChange={(event) => setEditForm({ ...editForm, ramo: event.target.value.toUpperCase() })} /></label><label className="op-field">CONTATO / TELEFONE<input value={editForm.contato} onChange={(event) => setEditForm({ ...editForm, contato: event.target.value })} /></label><div className="op-two-columns"><label className="op-field">STATUS<select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as Status })}><option>ATIVO</option><option>RISCO</option><option>URGENTE</option><option>INATIVO</option></select></label><label className="op-field">MIX<input type="number" value={editForm.mix} onChange={(event) => setEditForm({ ...editForm, mix: Number(event.target.value) })} /></label></div><label className="op-field">RECEITA TOTAL<input type="number" step="0.01" value={editForm.receita} onChange={(event) => setEditForm({ ...editForm, receita: Number(event.target.value) })} /></label><div className="op-actions"><button className="op-secondary" onClick={() => { setEditing(null); setEditForm(null); }}>CANCELAR</button><button className="op-primary" onClick={saveClientEdit}><Save size={15} /> SALVAR CLIENTE</button></div></> : <><h3>EDITAR INFORMAÇÃO</h3><p>O Administrador poderá salvar esta alteração no Drive quando o Apps Script estiver conectado.</p><button className="op-primary" onClick={() => setEditing(null)}>FECHAR</button></>}</div></div>}</div>;
+}
